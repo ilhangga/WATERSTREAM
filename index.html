@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Monitoring Banjir Terintegrasi</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        :root {
+            --danger: #e74c3c;
+            --warning: #f39c12;
+            --safe: #27ae60;
+            --dark: #2c3e50;
+        }
+
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #f4f7f9; color: var(--dark); }
+        .header { background: var(--dark); color: white; padding: 1rem 2rem; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .container { max-width: 1100px; margin: 20px auto; padding: 0 15px; }
+        
+        #map { height: 450px; width: 100%; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); margin-bottom: 25px; z-index: 1; }
+        
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th { background: #f8f9fa; padding: 12px; text-align: left; border-bottom: 2px solid #eee; }
+        td { padding: 12px; border-bottom: 1px solid #eee; }
+        
+        .status-badge { padding: 5px 12px; border-radius: 15px; font-size: 0.75em; font-weight: bold; color: white; text-transform: uppercase; }
+        .bg-danger { background-color: var(--danger); }
+        .bg-warning { background-color: var(--warning); }
+        .bg-safe { background-color: var(--safe); }
+
+        .sensor-val { font-weight: bold; font-family: monospace; font-size: 1.1em; }
+        #connection-status { font-size: 0.9em; float: right; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>🌊 WATERSTREAM (Water Status Real-Time Monitoring)</h1>
+	<p>Status Sistem: <span id="sys-status">Aktif</span> | <small>Update otomatis setiap 3 detik</small></p>
+</div>
+
+<div class="container">
+    <div id="map"></div>
+
+    <div class="card">
+        <h3>Riwayat Deteksi Terkini 
+            <span id="connection-status">🟡 Menghubungkan ke Supabase...</span>
+        </h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Waktu</th>
+                    <th>Ketinggian Air Kali Rungkut (cm)</th>
+                    <th>Status</th>
+                    <th>Ketinggian Air Merr (cm)</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="log-body">
+                <tr><td colspan="5" style="text-align:center;">Menunggu data masuk...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script>
+    // === 1. KONFIGURASI SUPABASE ===
+    const SUPABASE_URL = 'https://mywwzsnrluabggykltyd.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_yMO4rIHK-yiWgi2k5cfajg_qtaKvk7f';
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // === 2. INISIALISASI PETA LEAFLET ===
+    const map = L.map('map').setView([-7.312827, 112.775719], 16);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    // Konfigurasi Lokasi Sensor
+    const sensorConfigs = [
+        { id: 1, name: "Kali Rungkut", lat: -7.311767, lng: 112.775759, col: 'jarak_sensor_1' },
+        { id: 2, name: "Merr", lat: -7.311016, lng: 112.780614, col: 'jarak_sensor_2' }
+    ];
+
+    const markers = {};
+    sensorConfigs.forEach(s => {
+        markers[s.id] = L.circleMarker([s.lat, s.lng], {
+            radius: 12, weight: 2, color: 'white', fillOpacity: 0.8, fillColor: '#95a5a6'
+        }).addTo(map);
+        markers[s.id].bindPopup(`<strong>${s.name}</strong><br>Loading...`);
+    });
+
+    // === 3. FUNGSI LOGIKA STATUS ===
+    function getStatusInfo(distance) {
+        if (distance < 10) return { label: "Bahaya", class: "bg-danger", color: "#e74c3c" };
+        if (distance < 15) return { label: "Waspada", class: "bg-warning", color: "#f39c12" };
+        return { label: "Aman", class: "bg-safe", color: "#27ae60" };
+    }
+
+    // === 4. NOTIFIKASI BROWSER ===
+    function sendAlert(sensorName, status) {
+        if (status === "Bahaya" && Notification.permission === "granted") {
+            new Notification("PERINGATAN BANJIR!", {
+                body: `Ketinggian air kritis terdeteksi di ${sensorName}`,
+                icon: "https://cdn-icons-png.flaticon.com/512/4005/4005666.png"
+            });
+        }
+    }
+
+    if (Notification.permission !== "denied") {
+        Notification.requestPermission();
+    }
+
+    // === 5. UPDATE UI (PETA & TABEL) ===
+    async function updateDisplay() {
+        try {
+            const { data, error } = await supabaseClient
+                .from('sensor_jarak')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .limit(5);
+
+            if (error) throw error;
+            if (!data || data.length === 0) return;
+
+            document.getElementById('connection-status').innerText = "🟢 Terhubung ke Supabase";
+
+            // Update Tabel
+            const logBody = document.getElementById('log-body');
+            logBody.innerHTML = '';
+
+            data.forEach((row, index) => {
+                const s1 = getStatusInfo(row.jarak_sensor_1);
+                const s2 = getStatusInfo(row.jarak_sensor_2);
+                const waktu = new Date(row.created_at).toLocaleTimeString('id-ID');
+
+                // Update Marker Peta (hanya untuk data terbaru/index 0)
+                if (index === 0) {
+                    sensorConfigs.forEach(config => {
+                        const val = row[config.col];
+                        const stat = getStatusInfo(val);
+                        markers[config.id].setStyle({ fillColor: stat.color });
+                        markers[config.id].setPopupContent(`
+                            <strong>${config.name}</strong><br>
+                            Jarak: <span class="sensor-val">${val} cm</span><br>
+                            Status: <span class="status-badge ${stat.class}">${stat.label}</span>
+                        `);
+
+                        if (val < 50) sendAlert(config.name, stat.label);
+                    });
+                }
+
+                // Tambahkan baris ke tabel
+                const tr = `
+                    <tr>
+                        <td>${waktu}</td>
+                        <td class="sensor-val">${row.jarak_sensor_1}</td>
+                        <td><span class="status-badge ${s1.class}">${s1.label}</span></td>
+                        <td class="sensor-val">${row.jarak_sensor_2}</td>
+                        <td><span class="status-badge ${s2.class}">${s2.label}</span></td>
+                    </tr>
+                `;
+                logBody.innerHTML += tr;
+            });
+
+        } catch (err) {
+            document.getElementById('connection-status').innerText = "🔴 Error: " + err.message;
+        }
+    }
+
+    // === 6. REALTIME SUBSCRIPTION ===
+    supabaseClient
+        .channel('any')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'sensor_jarak' }, payload => {
+            console.log('Data masuk:', payload.new);
+            updateDisplay();
+        })
+        .subscribe();
+
+    // Jalankan awal
+    updateDisplay();
+</script>
+
+</body>
+</html>
