@@ -126,7 +126,7 @@
                 .from('sensor_jarak')
                 .select('*')
                 .order('created_at', { ascending: false })
-                .limit(5);
+                .limit(10);
 
             if (error) throw error;
             if (!data || data.length === 0) return;
