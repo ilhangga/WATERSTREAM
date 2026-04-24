@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer-when-downgrade">
     <title>Sistem Monitoring Banjir Terintegrasi</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -41,6 +41,7 @@
 <div class="header">
     <h1>🌊 WATERSTREAM (Water Status Real-Time Monitoring)</h1>
 	<p>Status Sistem: <span id="sys-status">Aktif</span> | <small>Update otomatis setiap 3 detik</small></p>
+	<p><small>🟢 Aman | 🟡 Waspada | 🔴 Bahaya</small></p>
 </div>
 
 <div class="container">
@@ -69,6 +70,7 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://jsdelivr.net"></script>
 
 <script>
     // === 1. KONFIGURASI SUPABASE ===
@@ -78,9 +80,9 @@
 
     // === 2. INISIALISASI PETA LEAFLET ===
     const map = L.map('map').setView([-7.312827, 112.775719], 16);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors'
-    }).addTo(map);
+	L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom, 2012'
+	}).addTo(map);
 
     // Konfigurasi Lokasi Sensor
     const sensorConfigs = [
@@ -102,7 +104,7 @@
         if (distance < 15) return { label: "Waspada", class: "bg-warning", color: "#f39c12" };
         return { label: "Aman", class: "bg-safe", color: "#27ae60" };
     }
-
+	
     // === 4. NOTIFIKASI BROWSER ===
     function sendAlert(sensorName, status) {
         if (status === "Bahaya" && Notification.permission === "granted") {
