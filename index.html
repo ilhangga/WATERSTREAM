@@ -34,12 +34,23 @@
 
         .sensor-val { font-weight: bold; font-family: monospace; font-size: 1.1em; }
         #connection-status { font-size: 0.9em; float: right; }
+		.footer {
+            text-align: center;
+            padding: 25px 15px;
+            margin-top: 40px;
+            background: #fff;
+            border-top: 1px solid #ddd;
+            color: #666;
+            font-size: 0.85rem;
+        }
+
     </style>
 </head>
 <body>
 
 <div class="header">
     <h1>🌊 WATERSTREAM (Water Status Real-Time Monitoring)</h1>
+	<p>LPPS SMP Negeri 23 Surabaya 2026<p>
 	<p>Status Sistem: <span id="sys-status">Aktif</span> | <small>Update otomatis setiap 3 detik</small></p>
 	<p><small>🟢 Aman | 🟡 Waspada | 🔴 Bahaya</small></p>
 </div>
@@ -68,6 +79,10 @@
     </div>
 </div>
 
+<footer class="footer">
+    <p>© 2026 Spenduga Tech. All Rights Reserved. | Site by Michael Mictal Nerawulang, Karisma Rio Haryanto, Ilham Angga Pratama</p>
+</footer>
+	
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://jsdelivr.net"></script>
